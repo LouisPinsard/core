@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace ApiPlatform\Core\Bridge\Symfony\Bundle\DependencyInjection\Compiler;
 
+use ApiPlatform\Core\Tests\Fixtures\DummyFilter;
 use ApiPlatform\Core\Util\AnnotationFilterExtractorTrait;
 use ApiPlatform\Core\Util\ReflectionClassRecursiveIterator;
 use Doctrine\Common\Annotations\Reader;
@@ -64,9 +65,11 @@ final class AnnotationFilterPass implements CompilerPassInterface
                 continue;
             }
 
+            $reflectionClass = $container->getReflectionClass($filterClass, false);
             if ($container->has($filterClass) && ($definition = $container->findDefinition($filterClass))->isAbstract()) {
                 $definition = new ChildDefinition($definition->getClass());
-            } elseif ($reflectionClass = $container->getReflectionClass($filterClass, false)) {
+
+            } elseif ($reflectionClass) {
                 $definition = new Definition($reflectionClass->getName());
                 $definition->setAutoconfigured(true);
             } else {
@@ -77,6 +80,9 @@ final class AnnotationFilterPass implements CompilerPassInterface
             $definition->setAutowired(true);
 
             foreach ($arguments as $key => $value) {
+                if (null === $reflectionConstructor = $reflectionClass->getConstructor()) {
+                    break;
+                }
                 $definition->setArgument("$$key", $value);
             }
 

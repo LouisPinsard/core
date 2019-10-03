@@ -21,6 +21,8 @@ use ApiPlatform\Core\Bridge\Doctrine\Orm\Filter\SearchFilter;
 use ApiPlatform\Core\Bridge\Symfony\Bundle\DependencyInjection\Compiler\AnnotationFilterPass;
 use ApiPlatform\Core\Exception\InvalidArgumentException;
 use ApiPlatform\Core\Serializer\Filter\GroupFilter;
+use ApiPlatform\Core\Tests\Fixtures\DummyFilter;
+use ApiPlatform\Core\Tests\Fixtures\DummyFilterWithoutConstructor;
 use ApiPlatform\Core\Tests\Fixtures\TestBundle\Doctrine\Orm\Filter\AnotherDummyFilter;
 use ApiPlatform\Core\Tests\Fixtures\TestBundle\Entity\Dummy;
 use Doctrine\Common\Annotations\Reader;
@@ -53,7 +55,10 @@ class AnnotationFilterPassTest extends TestCase
 
         $reader->getPropertyAnnotations(Argument::type(\ReflectionProperty::class))->will(function ($args) {
             if (Dummy::class === $args[0]->class && 'dummyDate' === $args[0]->name) {
-                return [new ApiFilter(['value' => DateFilter::class]), new ApiProperty()];
+                return [
+                    new ApiFilter(['value' => DateFilter::class]),
+                    new ApiProperty(),
+                ];
             }
 
             return [];
@@ -61,7 +66,9 @@ class AnnotationFilterPassTest extends TestCase
 
         $reader->getClassAnnotations(Argument::type(\ReflectionClass::class))->will(function ($args) {
             if (Dummy::class === $args[0]->name) {
-                return [new ApiFilter(['value' => SearchFilter::class, 'strategy' => 'exact', 'properties' => ['description', 'relatedDummy.name', 'name']]), new ApiResource([]), new ApiFilter(['value' => GroupFilter::class, 'arguments' => ['parameterName' => 'foobar']])];
+                return [new ApiFilter(['value' => SearchFilter::class, 'strategy' => 'exact', 'properties' => ['description', 'relatedDummy.name', 'name']]), new ApiResource([]),
+                    new ApiFilter(['value' => GroupFilter::class, 'arguments' => ['parameterName' => 'foobar']]),
+                ];
             }
 
             return [];
@@ -81,6 +88,7 @@ class AnnotationFilterPassTest extends TestCase
 
         $containerBuilderProphecy->getReflectionClass(SearchFilter::class, false)->willReturn(new \ReflectionClass(SearchFilter::class))->shouldBeCalled();
         $containerBuilderProphecy->getReflectionClass(GroupFilter::class, false)->willReturn(new \ReflectionClass(GroupFilter::class))->shouldBeCalled();
+        $containerBuilderProphecy->getReflectionClass(DateFilter::class, false)->willReturn(new \ReflectionClass(GroupFilter::class))->shouldBeCalled();
 
         $containerBuilderProphecy->setDefinition('annotated_api_platform_core_tests_fixtures_test_bundle_entity_dummy_api_platform_core_bridge_doctrine_orm_filter_search_filter', Argument::that(function ($def) {
             $this->assertInstanceOf(Definition::class, $def);
@@ -204,6 +212,57 @@ class AnnotationFilterPassTest extends TestCase
 
         $this->expectException(DependencyInjectionInvalidArgumentException::class);
         $this->expectExceptionMessage(sprintf('Class "%s" used for service "annotated_api_platform_core_tests_fixtures_test_bundle_entity_dummy_api_platform_core_bridge_doctrine_orm_filter_search_filter" cannot be found.', SearchFilter::class));
+
+        $annotationFilterPass->process($containerBuilderProphecy->reveal());
+    }
+
+    public function testProcessFilterWithoutConstructor()
+    {
+        $annotationFilterPass = new AnnotationFilterPass();
+
+        $this->assertInstanceOf(CompilerPassInterface::class, $annotationFilterPass);
+
+        $containerBuilderProphecy = $this->prophesize(ContainerBuilder::class);
+
+        $containerBuilderProphecy->getParameter('api_platform.resource_class_directories')->shouldBeCalled()->willReturn([
+            __DIR__ . '/../../../../../Fixtures/TestBundle/Entity/',
+        ]);
+
+        $reader = $this->prophesize(Reader::class);
+
+        $reader->getPropertyAnnotations(Argument::type(\ReflectionProperty::class))->will(function ($args) {
+            if (Dummy::class === $args[0]->class && 'dummyDate' === $args[0]->name) {
+                return [new ApiProperty(), new ApiFilter(['value' => DummyFilterWithoutConstructor::class])];
+            }
+
+            return [];
+        });
+
+        $reader->getClassAnnotations(Argument::type(\ReflectionClass::class))->will(function ($args) {
+            if (Dummy::class === $args[0]->name) {
+                return [new ApiResource([])];
+            }
+
+            return [];
+        });
+
+        $containerBuilderProphecy->get('annotation_reader')->shouldBeCalled()->willReturn($reader->reveal());
+
+        $containerBuilderProphecy->has('annotated_api_platform_core_tests_fixtures_test_bundle_entity_dummy_api_platform_core_tests_fixtures_dummy_filter_without_constructor')->shouldBeCalled()->willReturn(false);
+
+        $containerBuilderProphecy->has(DummyFilterWithoutConstructor::class)->willReturn(true)->shouldBeCalled();
+
+        $containerBuilderProphecy->getReflectionClass(DummyFilterWithoutConstructor::class, false)->willReturn(new \ReflectionClass(DummyFilterWithoutConstructor::class))->shouldBeCalled();
+        $containerBuilderProphecy->findDefinition(DummyFilterWithoutConstructor::class)->willReturn((new Definition(DummyFilterWithoutConstructor::class))->setAbstract(false))->shouldBeCalled();
+
+
+        $containerBuilderProphecy->setDefinition('annotated_api_platform_core_tests_fixtures_test_bundle_entity_dummy_api_platform_core_tests_fixtures_dummy_filter_without_constructor', Argument::that(function ($def) {
+            $this->assertInstanceOf(Definition::class, $def);
+            $this->assertEquals(DummyFilterWithoutConstructor::class, $def->getClass());
+            $this->assertEquals([], $def->getArguments());
+
+            return true;
+        }))->shouldBeCalled();
 
         $annotationFilterPass->process($containerBuilderProphecy->reveal());
     }
